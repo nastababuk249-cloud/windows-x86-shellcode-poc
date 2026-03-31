@@ -112,11 +112,35 @@ If you already have the executable, you can disable protections with `editbin`:
 editbin /NXCOMPAT:NO /DYNAMICBASE:NO vulnerable.exe
 ```
 
-### Step 3: Run it
-1. Start `vulnerable.exe`.
-2. When prompted, enter a long string (more than 32 characters).
-3. If the overflow works, the saved return address is overwritten.
-4. The program may crash, jump to random memory, or (in a real exploit with proper shellcode) execute the payload.
+### Step 3: Compile exploit.c
+The `exploit.c` program generates the malicious payload string that will overflow the buffer. Compile it with the same security flags disabled:
+
+```batch
+cl /c /GS- /W3 /Zl exploit.c
+link /SUBSYSTEM:CONSOLE /DYNAMICBASE:NO /NXCOMPAT:NO exploit.obj /OUT:exploit.exe
+```
+
+### Step 4: Trigger the exploit
+To execute the exploit, pipe the output of `exploit.exe` directly into `vulnerable.exe`:
+
+```batch
+exploit.exe | vulnerable.exe
+```
+
+Here's what happens:
+1. `exploit.exe` generates a crafted input string (padding + overwritten return address + shellcode).
+2. The pipe `|` sends this output as stdin to `vulnerable.exe`.
+3. `vulnerable.exe` calls `gets(buffer)` and reads the malicious input.
+4. The input overflows the 32-byte buffer.
+5. The extra bytes overwrite the saved `EBP` and return address.
+6. The return address now points to the shellcode on the stack.
+7. When the function returns, the CPU jumps to the shellcode.
+8. The shellcode executes and displays the message box (or whatever payload is embedded).
+
+If successful, you will see a message box with "CAN I HACK THE PC?" appear on screen. This proves that:
+- The buffer overflow worked.
+- Execution was redirected to the shellcode.
+- Arbitrary code ran under the program's permissions.
 
 ## Why the README is complete
 
