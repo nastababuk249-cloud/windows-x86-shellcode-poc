@@ -24,137 +24,73 @@ The problem: `gets()` does not check the buffer size.
 It keeps reading characters until it encounters a newline.
 If the user types 40 or 50 characters, the extra characters overflow past the 32-byte buffer.
 
-## How memory is laid out on the stack
+## The Stack Memory Layout
 
-When a C function runs, the stack (a region of memory) stores:
-
-1. Local variables (like `buffer`)
-2. The saved `EBP` (base pointer from the calling function)
-3. The saved return address (where the CPU should jump when the function returns)
-
-Picture it like this:
+The stack stores local variables stacked on top of each other. After the buffer, there's the return address—the address where the CPU should jump back to when the function ends.
 
 ```
-Lower addresses (top of stack as drawn)
 [  buffer (32 bytes)  ]
-[    saved EBP (4 bytes)     ]
-[  return address (4 bytes)  ]
-Higher addresses (bottom)
+[  return address (4 bytes)  ]  ← This is what we overwrite
 ```
 
-When `gets()` overflows `buffer` with too much input, the extra bytes overwrite the saved `EBP` and then the return address.
+When `gets()` reads more than 32 bytes, the extra bytes overflow past the buffer and overwrite the return address. If we put a specific address there, the CPU will jump to it when the function returns.
 
-If we carefully craft the overflow to place a specific address in the return address field, the CPU will jump to that address when the function tries to return.
+## How the exploit works
 
-## How the exploit works: Step by step
-
-1. The program starts and allocates `buffer[32]` on the stack.
-2. It calls `gets(buffer)` to read a line of user input.
-3. We send a string that is longer than 32 bytes (say, 50 bytes).
+1. The program allocates `buffer[32]` on the stack.
+2. It calls `gets(buffer)` to read user input.
+3. We send more than 32 bytes (e.g., 50 bytes).
 4. `gets()` has no size check, so it writes all 50 bytes into the buffer.
-5. The extra 18 bytes overflow past `buffer` and overwrite the saved `EBP` and return address.
-6. We carefully construct the overflow so the return address points to shellcode on the stack.
-7. When the function returns, the CPU reads the overwritten return address.
-8. The CPU jumps to the shellcode.
-9. The shellcode runs under the program's permissions.
+5. The extra 18 bytes overflow and overwrite the return address.
+6. We construct the overflow so the return address points to shellcode on the stack.
+7. When the function returns, the CPU jumps to the shellcode.
+8. The shellcode runs and displays a message box.
 
-This is the simplest form of code execution through a buffer overflow.
+This is how arbitrary code execution happens through a buffer overflow.
 
 ## What happens in the shellcode: The payload
 
-`messageBox.asm` is a small piece of code designed to run after the overflow.
+`messageBox.asm` is a small piece of code designed to run after the overflow. It:
 
-It does the following:
+1. Loads `USER32.DLL` (the Windows library for message boxes).
+2. Calls `MessageBoxA` to display a message box with "CAN I HACK THE PC?".
+3. Calls `ExitProcess` to safely exit the program.
 
-1. **Load USER32.DLL**: Calls `LoadLibraryA` with the string "USER32.DLL" to ensure the library is in memory.
-2. **Prepare arguments for MessageBoxA**: Pushes four arguments onto the stack (window handle, message text, caption, button type).
-3. **Call MessageBoxA**: Calls the Windows API function to display a message box with the text "CAN I HACK THE PC?".
-4. **Exit cleanly**: Calls `ExitProcess` to safely terminate the program.
-
-The key point: this is executable code that runs after the overflow redirects execution to it.
-When the message box appears on screen, it proves three things:
+When the message box appears, it proves:
 1. The buffer overflow worked and rewrote the return address.
 2. Execution jumped to the shellcode on the stack.
-3. The shellcode ran successfully and made Windows API calls.
+3. Arbitrary code ran successfully.
 
-In a real attack, this payload could do anything: steal data, create a user, download malware, etc.
-The message box is just a visible, safe way to demonstrate that arbitrary code execution happened.
+In a real attack, this payload could do anything: steal data, create a user, download malware, etc. The message box is just a safe way to demonstrate code execution.
 
-This specific payload uses hardcoded memory addresses for `MessageBoxA` (0x751D8830) and `ExitProcess` (0x7437ADB0).
-These addresses are specific to one system. The payload would need to be adjusted for a different Windows version or system.
+**Note:** This payload uses hardcoded memory addresses (`MessageBoxA` at 0x751D8830, `ExitProcess` at 0x7437ADB0). These are specific to one Windows system. Different Windows versions have different addresses.
 
-## How to build and run the demo
+## How to build and run
 
-### Step 1: Disable protections
-Modern Windows has multiple security features that prevent this exploit:
-- **Stack Canaries** (GS flag): detects stack overwrites.
-- **ASLR** (DYNAMICBASE): randomizes memory addresses so hardcoded addresses don't work.
-- **DEP/NX** (NXCOMPAT): marks the stack as non-executable to prevent code execution there.
-
-For this learning exercise, we disable all of them.
-
-### Step 2: Compile on Windows
-Use MSVC (Microsoft Visual C++) with specific flags:
+### Step 1: Compile vulnerable.c
+On Windows with MSVC, disable security protections:
 
 ```batch
-cl /c /GS- /W3 /Zl vulnerable.c
-link /SUBSYSTEM:CONSOLE /DYNAMICBASE:NO /NXCOMPAT:NO vulnerable.obj /OUT:vulnerable.exe
+cl /GS- /c vulnerable.c
+link /DYNAMICBASE:NO /NXCOMPAT:NO vulnerable.obj /OUT:vulnerable.exe
 ```
 
-Flag meanings:
-- `/GS-` disables stack buffer overrun protection.
-- `/DYNAMICBASE:NO` disables Address Space Layout Randomization (ASLR).
-- `/NXCOMPAT:NO` disables DEP, allowing code on the stack to execute.
+These flags disable stack canaries (`/GS-`), ASLR (`/DYNAMICBASE:NO`), and DEP (`/NXCOMPAT:NO`). Modern Windows prevents this exploit, so we disable those protections for this learning exercise.
 
-If you already have the executable, you can disable protections with `editbin`:
-
+### Step 2: Compile exploit.c
 ```batch
-editbin /NXCOMPAT:NO /DYNAMICBASE:NO vulnerable.exe
+cl /GS- /c exploit.c
+link /DYNAMICBASE:NO /NXCOMPAT:NO exploit.obj /OUT:exploit.exe
 ```
 
-### Step 3: Compile exploit.c
-The `exploit.c` program generates the malicious payload string that will overflow the buffer. Compile it with the same security flags disabled:
-
-```batch
-cl /c /GS- /W3 /Zl exploit.c
-link /SUBSYSTEM:CONSOLE /DYNAMICBASE:NO /NXCOMPAT:NO exploit.obj /OUT:exploit.exe
-```
-
-### Step 4: Trigger the exploit
-To execute the exploit, pipe the output of `exploit.exe` directly into `vulnerable.exe`:
+### Step 3: Run the exploit
+Pipe the output of `exploit.exe` into `vulnerable.exe`:
 
 ```batch
 exploit.exe | vulnerable.exe
 ```
 
-Here's what happens:
-1. `exploit.exe` generates a crafted input string (padding + overwritten return address + shellcode).
-2. The pipe `|` sends this output as stdin to `vulnerable.exe`.
-3. `vulnerable.exe` calls `gets(buffer)` and reads the malicious input.
-4. The input overflows the 32-byte buffer.
-5. The extra bytes overwrite the saved `EBP` and return address.
-6. The return address now points to the shellcode on the stack.
-7. When the function returns, the CPU jumps to the shellcode.
-8. The shellcode executes and displays the message box (or whatever payload is embedded).
-
-If successful, you will see a message box with "CAN I HACK THE PC?" appear on screen. This proves that:
-- The buffer overflow worked.
-- Execution was redirected to the shellcode.
-- Arbitrary code ran under the program's permissions.
-
-## Why the README is complete
-
-This README explains:
-1. What `gets()` is and why it is unsafe (no size limit).
-2. How the stack stores local variables, saved registers, and return addresses.
-3. How an overflow can overwrite the return address.
-4. How the CPU uses the return address when a function returns.
-5. How shellcode can execute when the return address points to it.
-6. What protections exist and why we disable them.
-7. How to build and run the example.
-
-You now understand the entire buffer overflow exploit flow.
-Read the code files and compare them to this explanation to solidify your understanding.
+If successful, a message box will appear with "CAN I HACK THE PC?" on screen. This proves the overflow worked and executed the shellcode.
 
 ## Important safety notice
 This example is for learning only.
