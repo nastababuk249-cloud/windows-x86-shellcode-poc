@@ -1,0 +1,30 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup MinGW
+      uses: egor-tensin/setup-mingw@v2
+      with:
+        platform: x86
+    
+    - name: Build
+      run: |
+        make clean
+        make all
+    
+    - name: Check binaries
+      run: |
+        dir *.exe
+        echo "vulnerable.exe exists"
+        echo "exploit.exe exists"
