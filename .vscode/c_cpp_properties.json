@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/MinGW/lib/gcc/mingw32/*/include",
+                "C:/MinGW/include",
+                "C:/Program Files/Microsoft Visual Studio/*/Community/VC/Tools/MSVC/*/include",
+                "C:/Program Files (x86)/Windows Kits/10/Include/*/um",
+                "C:/Program Files (x86)/Windows Kits/10/Include/*/shared"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "C:/MinGW/bin/gcc.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x86"
+        },
+        {
+            "name": "ник",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/MinGW/lib/gcc/mingw32/*/include",
+                "C:/MinGW/include",
+                "C:/Program Files (x86)/Windows Kits/10/Include/*/um",
+                "C:/Program Files (x86)/Windows Kits/10/Include/*/shared"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "C:/MinGW/bin/gcc.exe",
+            "cStandard": "c23",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x86"
+        }
+    ],
+    "version": 4
+}
